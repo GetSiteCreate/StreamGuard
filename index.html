@@ -578,19 +578,19 @@
 
       <!-- Выбор платформы -->
       <div class="platforms-list" id="platformSelector">
-        <button type="button" class="platform-chip">
+        <button type="button" class="platform-chip" data-platform="Twitch">
           <img src="twitch.png" alt="Twitch">
           Twitch
         </button>
-        <button type="button" class="platform-chip active">
+        <button type="button" class="platform-chip active" data-platform="YouTube">
           <img src="youtube.png" alt="YouTube">
           YouTube
         </button>
-        <button type="button" class="platform-chip">
+        <button type="button" class="platform-chip" data-platform="Kick">
           <img src="kick.png" alt="Kick">
           Kick
         </button>
-        <button type="button" class="platform-chip">
+        <button type="button" class="platform-chip" data-platform="RTMP">
           <img src="rtmp.png" alt="RTMP">
           RTMP
         </button>
@@ -658,7 +658,8 @@
         queueMsg: (pos) => `В очереди запросов: <span style="color:#ffffff; font-weight:600;">${pos}</span> чел. Ожидание сервера...`,
         processingMsg: 'Обработка запроса: валидация ключа в сети...',
         validKey: 'Ключ легитимен <span style="color: #4ade80;">✔ [STATUS: VERIFIED & ACTIVE]</span>',
-        invalidKey: 'Некорректный формат ключа <span style="color: #f87171;">✖ [STATUS: INVALID]</span>'
+        invalidKey: 'Некорректный формат ключа <span style="color: #f87171;">✖ [STATUS: INVALID]</span>',
+        mismatchKey: (detected, selected) => `Ошибка платформы: это ключ от <b style="color: #ffffff;">${detected}</b>, а выбрана платформа <b style="color: #ffffff;">${selected}</b>! <span style="color: #f87171;">✖ [MISMATCH]</span>`
       },
       en: {
         pageTitle: 'STREAMGUARD — Stream Key Verification',
@@ -674,7 +675,8 @@
         queueMsg: (pos) => `In request queue: <span style="color:#ffffff; font-weight:600;">${pos}</span> users. Waiting for server...`,
         processingMsg: 'Processing request: validating key on network...',
         validKey: 'Key is legitimate <span style="color: #4ade80;">✔ [STATUS: VERIFIED & ACTIVE]</span>',
-        invalidKey: 'Invalid stream key format <span style="color: #f87171;">✖ [STATUS: INVALID]</span>'
+        invalidKey: 'Invalid stream key format <span style="color: #f87171;">✖ [STATUS: INVALID]</span>',
+        mismatchKey: (detected, selected) => `Platform mismatch: this is a <b style="color: #ffffff;">${detected}</b> key, but <b style="color: #ffffff;">${selected}</b> is selected! <span style="color: #f87171;">✖ [MISMATCH]</span>`
       }
     };
 
@@ -791,6 +793,23 @@
     // Вспомогательная функция задержки
     const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+    // Определение типа платформы по формату ключа
+    function detectPlatformByKey(key) {
+      if (/^live_[a-zA-Z0-9_]+$/i.test(key)) return 'Twitch';
+      if (/^[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}(-[a-z0-9]{4})?$/i.test(key)) return 'YouTube';
+      if (/^sk_[a-zA-Z0-9_-]{10,}$/i.test(key)) return 'Kick';
+      return null;
+    }
+
+    // Проверка соответствия ключа выбранной платформе
+    function isValidForPlatform(key, platform) {
+      if (platform === 'Twitch') return /^live_[a-zA-Z0-9_]{10,}$/i.test(key);
+      if (platform === 'YouTube') return /^[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}(-[a-z0-9]{4})?$/i.test(key);
+      if (platform === 'Kick') return /^sk_[a-zA-Z0-9_-]{10,}$/i.test(key);
+      if (platform === 'RTMP') return /^[a-zA-Z0-9_\-.~]{8,128}$/.test(key);
+      return key.length >= 12;
+    }
+
     checkBtn.addEventListener('click', async () => {
       const key = input.value.trim();
       const t = translations[currentLang];
@@ -832,7 +851,15 @@
       checkBtn.disabled = false;
       checkBtn.style.opacity = '1';
 
-      if (key.length >= 12) {
+      const activeChip = document.querySelector('.platform-chip.active');
+      const selectedPlatform = activeChip ? activeChip.dataset.platform : 'YouTube';
+      const detectedPlatform = detectPlatformByKey(key);
+
+      if (detectedPlatform && detectedPlatform !== selectedPlatform && selectedPlatform !== 'RTMP') {
+        resultBox.innerHTML = t.mismatchKey(detectedPlatform, selectedPlatform);
+        resultBox.style.color = '#f87171';
+        resultBox.style.borderColor = 'rgba(248, 113, 113, 0.5)';
+      } else if (isValidForPlatform(key, selectedPlatform)) {
         resultBox.innerHTML = t.validKey;
         resultBox.style.color = '#4ade80';
         resultBox.style.borderColor = 'rgba(74, 222, 128, 0.5)';
